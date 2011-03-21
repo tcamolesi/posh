@@ -31,6 +31,14 @@ BuiltinCmd sh_builtins[] = {
   { NULL, NULL }
 };
 
+enum ExecCmdResult {
+  ECMD_SUCCESS = 0,
+  ECMD_FAILED,
+  ECMD_EXIT
+};
+
+#define JT_NO_FG_JOB -1
+
 int sh_get_stdin(Command *cmd);
 int sh_get_stdout(Command *cmd);
 int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid);
@@ -40,13 +48,22 @@ int sh_find_job_by_pid(int pid);
 int sh_exec_cmd(Command *cmd);
 
 void sh_chld_handler(int sig, siginfo_t *siginfo, void *context);
+void sh_tstp_handler(int sig, siginfo_t *siginfo, void *context);
+
+void sh_tstp_handler(int sig, siginfo_t *siginfo, void *context) {
+  /* If there's a foreground job, take the tty control from it */
+  fprintf(stderr, "In handler...\n");
+  if(sh_jobs.fg_job != JT_NO_FG_JOB) {
+    tcsetpgrp(STDIN_FILENO, getpgrp());
+    sh_jobs.fg_job = JT_NO_FG_JOB;
+  }
+}
 
 void sh_chld_handler(int sig, siginfo_t *siginfo, void *context) {
   int pos;
   pos = sh_find_job_by_pid(siginfo->si_pid);
 
   /*Finish zombie processes*/
-  /*if(siginfo->si_code != SH_STOPPED || siginfo->si_code != CLD_CONTINUED)*/
   waitpid(siginfo->si_pid, 0, WNOHANG);
 
   if(pos == -1 || sh_jobs.jobs[pos].js == SH_UNUSED)
@@ -105,7 +122,7 @@ int sh_cmd_fg(Command* cmd) {
       }
     }
   }
-  return 0;
+  return ECMD_SUCCESS;
 }
 
 int sh_cmd_bg(Command* cmd) {
@@ -121,7 +138,7 @@ int sh_cmd_bg(Command* cmd) {
       }
     }
   }
-  return 0;
+  return ECMD_SUCCESS;
 }
 
 int sh_cmd_jobs(Command* cmd) {
@@ -131,7 +148,7 @@ int sh_cmd_jobs(Command* cmd) {
       sh_print_job(i);
   }
 
-  return 0;
+  return ECMD_SUCCESS;
 }
 
 int sh_cmd_cd(Command* cmd) {
@@ -145,11 +162,11 @@ int sh_cmd_cd(Command* cmd) {
     fprintf(stderr, "ERROR: Unable to change directory.\n");
   }
 
-  return 0;
+  return ECMD_SUCCESS;
 }
 
 int sh_cmd_exit(Command* cmd) {
-  return -1;
+  return ECMD_EXIT;
 }
 
 int sh_cmd_kill(Command* cmd) {
@@ -172,12 +189,12 @@ int sh_cmd_kill(Command* cmd) {
         kill(tmp, SIGKILL);
     }
   }
-  return 0;
+  return ECMD_SUCCESS;
 }
 
 int sh_exec_cmd(Command *cmd) {
   int i;
-  int res = 1;
+  int res = ECMD_FAILED;
   for(i = 0; sh_builtins[i].cmd != NULL; i++) {
     if(!strcmp(cmd->cmd, sh_builtins[i].cmd)) {
       res = sh_builtins[i].fn(cmd);
@@ -193,8 +210,11 @@ void sh_update_jobs() {
   for(i = 0; i < SH_MAX_JOBS; i++) {
     job = &sh_jobs.jobs[i];
     if(job->js == SH_TERMINATED) {
-      if(!job->fg)
+      if(i == sh_jobs.fg_job)
+        sh_jobs.fg_job = JT_NO_FG_JOB;
+      else
         sh_print_job(i);
+
       job->js = SH_UNUSED;
       destroy_pipeline(job->ppl);
       if(i < sh_jobs.first_free)
@@ -235,16 +255,15 @@ int sh_foreground_job(int jid) {
   job = &sh_jobs.jobs[jid];
 
   /* Check if it's still active */
-  if(job->js == SH_UNUSED)
+  if(job->js == SH_UNUSED || job->js == SH_TERMINATED)
     return -1;
 
-  /* Mark as fg */
-  job->fg = 1;
+  /* Mark it as the foreground job */
+  sh_jobs.fg_job = jid;
 
   /* Give tty to the process group */
   tcsetpgrp(STDIN_FILENO, job->ppl->gid);
   
-  usleep(100);
   /* Wait for the pipeline to finish */
   while(1) {
     if(waitpid(-job->ppl->gid, NULL, 0) == -1) {
@@ -253,17 +272,27 @@ int sh_foreground_job(int jid) {
     }
   }
 
-  job->fg = 0;
-/*  tcsetpgrp(STDIN_FILENO, getpgrp());
-  tcsetpgrp(STDOUT_FILENO, getpgrp());*/
+  tcsetpgrp(STDIN_FILENO, getpgrp());
+
   return 0;
 }
 
 int sh_init() {
+  sigset_t mask;
   struct sigaction act;
+
+  /* Initialize the jobs table */
+  memset(&sh_jobs, 0, sizeof(sh_jobs));
+  sh_jobs.fg_job = JT_NO_FG_JOB;
 
   /* Create a new session */
   setsid();
+
+  /* Create a new process group */
+  /*setpgid(getpid(), getpid());*/
+
+  /* Acquire tty control */
+  /*tcsetpgrp(STDIN_FILENO, getpgrp());*/
 
   /* Setup the SIGCHLD handler */
   memset(&act, 0, sizeof(act));
@@ -271,8 +300,16 @@ int sh_init() {
   act.sa_flags = SA_SIGINFO;
   sigaction(SIGCHLD, &act, NULL);
 
-  /* Initialize the jobs table */
-  memset(&sh_jobs, 0, sizeof(sh_jobs));
+  /* Setup the SIGTSTP handler */
+  /*memset(&act, 0, sizeof(act));
+  act.sa_sigaction = &sh_tstp_handler;
+  act.sa_flags = SA_SIGINFO;
+  sigaction(SIGTSTP, &act, NULL);*/
+
+  /* Setup the signal mask */
+  /*sigemptyset(&mask);
+  sigaddset(&mask, SIGTSTP);
+  sigprocmask(SIG_UNBLOCK, &mask, NULL);*/
 
   return 1;
 }
@@ -290,9 +327,9 @@ int sh_process_pipeline(Pipeline* ppl) {
   sh_update_jobs();
 
   switch(sh_exec_cmd(ppl->cmds[0])) {
-    case -1:
+    case ECMD_EXIT:
       return 0;
-    case 0:
+    case ECMD_SUCCESS:
       return 1;
   }
 

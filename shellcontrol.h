@@ -24,12 +24,12 @@ enum JobState {
 typedef struct Job {
   Pipeline* ppl;
   int js;
-  int fg;
 } Job;
 
 typedef struct JobTable {
   Job jobs[SH_MAX_JOBS];
   int first_free;
+  int fg_job;
 } JobTable;
 
 extern BuiltinCmd sh_builtins[];
