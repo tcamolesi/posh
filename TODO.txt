@@ -4,8 +4,10 @@ High priority:
   - "Clean up" the job control system
 
 Medium priority:
+  - Fix grammar error, causing simple input redirection expressions such 
+      as "<xxx" to be accepted.
   - Document and modularize the source code
-  - Fix bugs with "more" or programs that alter the tty state
+  - Fix bugs with "more" or similar programs that alter the tty state
 
 Low Priority:
   - Globbing
