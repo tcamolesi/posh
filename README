@@ -1,0 +1,6 @@
+BIBLIOTECAS NECESSÁRIAS:
+libreadline6-dev
+flex
+bison
+
+sudo apt-get install libreadline6-dev flex bison

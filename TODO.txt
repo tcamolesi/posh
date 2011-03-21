@@ -1,0 +1,12 @@
+High priority:
+  - SIGINT and SIGSTP handlers
+  - SITTOU and SITTIN handlers
+  - "Clean up" the job control system
+
+Medium priority:
+  - Document and modularize the source code
+  - Fix bugs with "more" or programs that alter the tty state
+
+Low Priority:
+  - Globbing
+  - Custom auto-complete
