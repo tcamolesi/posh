@@ -9,46 +9,15 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
+#include "builtins.h"
 #include "command.h"
+#include "jobcontrol.h"
 #include "shellcontrol.h"
-
-int sh_cmd_jobs(Command* cmd);
-int sh_cmd_cd(Command* cmd);
-int sh_cmd_exit(Command* cmd);
-int sh_cmd_kill(Command* cmd);
-int sh_cmd_fg(Command* cmd);
-int sh_cmd_bg(Command* cmd);
-
-JobTable sh_jobs;
-BuiltinCmd sh_builtins[] = {
-  { "exit", sh_cmd_exit },
-  { "cd", sh_cmd_cd },
-  { "jobs", sh_cmd_jobs },
-  { "kill", sh_cmd_kill },
-  { "fg", sh_cmd_fg },
-  { "bg", sh_cmd_bg },
-  { "history", NULL },
-  { NULL, NULL }
-};
-
-enum ExecCmdResult {
-  ECMD_SUCCESS = 0,
-  ECMD_FAILED,
-  ECMD_EXIT
-};
-
-#define JT_NO_FG_JOB -1
 
 int sh_get_stdin(Command *cmd);
 int sh_get_stdout(Command *cmd);
 int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid);
 int sh_init();
-int sh_foreground_job(int jid);
-int sh_find_job_by_pid(int pid);
-int sh_exec_cmd(Command *cmd);
-
-void sh_chld_handler(int sig, siginfo_t *siginfo, void *context);
-void sh_tstp_handler(int sig, siginfo_t *siginfo, void *context);
 
 void sh_tstp_handler(int sig, siginfo_t *siginfo, void *context) {
   /* If there's a foreground job, take the tty control from it */
@@ -69,6 +38,9 @@ void sh_chld_handler(int sig, siginfo_t *siginfo, void *context) {
   if(pos == -1 || sh_jobs.jobs[pos].js == SH_UNUSED)
     return;
 
+  if (sh_jobs.jobs[pos].js == SH_TERMINATED)
+    return;
+
   switch(siginfo->si_code) {
     case CLD_STOPPED:
       sh_jobs.jobs[pos].js = SH_STOPPED;
@@ -81,200 +53,6 @@ void sh_chld_handler(int sig, siginfo_t *siginfo, void *context) {
     default:
       sh_jobs.jobs[pos].js = SH_TERMINATED;
   }
-}
-
-int sh_find_job_by_pid(int pid) {
-  int i;
-  Pipeline* ppl;
-  for(i = 0; i < SH_MAX_JOBS; i++) {
-    ppl = sh_jobs.jobs[i].ppl;
-    if(ppl && ppl->gid == pid)
-      return i;
-  }
-
-  return -1;
-}
-
-void sh_print_job(int jid) {
-  static const char* description[] = {
-    "Unused",
-    "Foreground",
-    "Running",
-    "Stopped",
-    "Terminated"
-  };
-
-  Job* job = &sh_jobs.jobs[jid];
-  fprintf(stderr, "[%d]  %-25s %s\n", jid+1, description[job->js],
-      job->ppl->cmdline);
-}
-
-int sh_cmd_fg(Command* cmd) {
-  int jid;
-  Job* job;
-
-  if(cmd->args[1] && sscanf(cmd->args[1], "%%%d", &jid) > 0) {
-    if(jid > 0 && jid < SH_MAX_JOBS) {
-      jid -= 1;
-      job = &sh_jobs.jobs[jid];
-      if(job->js != SH_UNUSED && job->js != SH_TERMINATED) {
-        sh_foreground_job(jid);
-      }
-    }
-  }
-  return ECMD_SUCCESS;
-}
-
-int sh_cmd_bg(Command* cmd) {
-  int jid;
-  Job* job;
-
-  if(cmd->args[1] && sscanf(cmd->args[1], "%%%d", &jid) > 0) {
-    if(jid > 0 && jid < SH_MAX_JOBS) {
-      jid -= 1;
-      job = &sh_jobs.jobs[jid];
-      if(job->js != SH_UNUSED && job->js != SH_TERMINATED) {
-        kill(-job->ppl->gid, SIGCONT);
-      }
-    }
-  }
-  return ECMD_SUCCESS;
-}
-
-int sh_cmd_jobs(Command* cmd) {
-  int i;
-  for(i = 0; i < SH_MAX_JOBS; i++) {
-    if(sh_jobs.jobs[i].js != SH_UNUSED)
-      sh_print_job(i);
-  }
-
-  return ECMD_SUCCESS;
-}
-
-int sh_cmd_cd(Command* cmd) {
-  int fd;
-  if(!cmd->args[1]) {
-    fd = open("~", O_RDONLY);
-  } else {
-    fd = open(cmd->args[1], O_RDONLY);
-  }
-  if(fchdir(fd) != 0) {
-    fprintf(stderr, "ERROR: Unable to change directory.\n");
-  }
-
-  return ECMD_SUCCESS;
-}
-
-int sh_cmd_exit(Command* cmd) {
-  return ECMD_EXIT;
-}
-
-int sh_cmd_kill(Command* cmd) {
-  int i = 0;
-  int tmp;
-  for(i = 1; cmd->args[i] != NULL; i++) {
-    char* arg = cmd->args[i];
-    /* Kill shell job */
-    if(arg[0] == '%') { 
-      if(sscanf(arg+1, "%d", &tmp) > 0) {
-        if(tmp > 0 && tmp < SH_MAX_JOBS) { /* Check bounds */
-          if(sh_jobs.jobs[tmp-1].js != SH_UNUSED) {
-            kill(-sh_jobs.jobs[tmp-1].ppl->gid, SIGKILL);
-          }
-        }
-      }
-    /* Kill process */
-    } if(sscanf(arg, "%d", &tmp) > 0) {
-      if(tmp > 0)
-        kill(tmp, SIGKILL);
-    }
-  }
-  return ECMD_SUCCESS;
-}
-
-int sh_exec_cmd(Command *cmd) {
-  int i;
-  int res = ECMD_FAILED;
-  for(i = 0; sh_builtins[i].cmd != NULL; i++) {
-    if(!strcmp(cmd->cmd, sh_builtins[i].cmd)) {
-      res = sh_builtins[i].fn(cmd);
-      break;
-    }
-  }
-  return res;
-}
-
-void sh_update_jobs() {
-  int i;
-  Job* job;
-  for(i = 0; i < SH_MAX_JOBS; i++) {
-    job = &sh_jobs.jobs[i];
-    if(job->js == SH_TERMINATED) {
-      if(i == sh_jobs.fg_job)
-        sh_jobs.fg_job = JT_NO_FG_JOB;
-      else
-        sh_print_job(i);
-
-      job->js = SH_UNUSED;
-      destroy_pipeline(job->ppl);
-      if(i < sh_jobs.first_free)
-        sh_jobs.first_free = i;
-    }
-  }
-}
-
-int sh_add_job(Pipeline *ppl) {
-  int i, pos;
-  Job* job;
-
-  if(sh_jobs.first_free >= SH_MAX_JOBS) {
-    return -1;
-  }
-
-  pos = sh_jobs.first_free;
-  sh_jobs.first_free = SH_MAX_JOBS;
-  for(i = pos + 1; i < SH_MAX_JOBS; i++) {
-    if(sh_jobs.jobs[i].js == SH_UNUSED) {
-      sh_jobs.first_free = i;
-      break;
-    }
-  }
-
-  job = &sh_jobs.jobs[pos];
-  job->ppl = ppl;
-  job->js = SH_STOPPED;
-
-  return pos;
-}
-
-int sh_foreground_job(int jid) {
-  Job* job;
-  /* Check bounds*/
-  if(jid < 0 || jid >= SH_MAX_JOBS)
-    return -1;
-  job = &sh_jobs.jobs[jid];
-
-  /* Check if it's still active */
-  if(job->js == SH_UNUSED || job->js == SH_TERMINATED)
-    return -1;
-
-  /* Mark it as the foreground job */
-  sh_jobs.fg_job = jid;
-
-  /* Give tty to the process group */
-  tcsetpgrp(STDIN_FILENO, job->ppl->gid);
-  
-  /* Wait for the pipeline to finish */
-  while(1) {
-    if(waitpid(-job->ppl->gid, NULL, 0) == -1) {
-      if(errno == ECHILD)
-        break;
-    }
-  }
-
-  tcsetpgrp(STDIN_FILENO, getpgrp());
-
-  return 0;
 }
 
 int sh_init() {
