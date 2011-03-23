@@ -1,8 +1,3 @@
-High priority:
-  - SIGINT and SIGSTP handlers
-  - SITTOU and SITTIN handlers
-  - "Clean up" the job control system
-
 Medium priority:
   - Fix grammar error, causing simple input redirection expressions such 
       as "<xxx" to be accepted.

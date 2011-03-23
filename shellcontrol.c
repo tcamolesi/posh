@@ -19,15 +19,6 @@ int sh_get_stdout(Command *cmd);
 int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid);
 int sh_init();
 
-void sh_tstp_handler(int sig, siginfo_t *siginfo, void *context) {
-  /* If there's a foreground job, take the tty control from it */
-    fprintf(stderr, "In handler\n");
-  if(sh_jobs.fg_job != JT_NO_FG_JOB) {
-    kill(-sh_jobs.jobs[sh_jobs.fg_job].ppl->gid, SIGSTOP);
-    sh_jobs.fg_job = JT_NO_FG_JOB;
-  }
-}
-
 void sh_chld_handler(int sig, siginfo_t *siginfo, void *context) {
   int pos;
   pos = sh_find_job_by_pid(siginfo->si_pid);
@@ -41,9 +32,15 @@ void sh_chld_handler(int sig, siginfo_t *siginfo, void *context) {
   if (sh_jobs.jobs[pos].js == SH_TERMINATED)
     return;
 
+  fprintf(stderr, "In child handler\n");
+
   switch(siginfo->si_code) {
     case CLD_STOPPED:
       sh_jobs.jobs[pos].js = SH_STOPPED;
+      if( pos == sh_jobs.fg_job ) {
+        sh_jobs.fg_job = JT_NO_FG_JOB;
+        tcsetpgrp(STDIN_FILENO, getpgrp());
+      }
       break;
 
     case CLD_CONTINUED:
@@ -78,17 +75,12 @@ int sh_init() {
   act.sa_flags = SA_SIGINFO;
   sigaction(SIGCHLD, &act, NULL);
 
-  /* Setup the SIGTSTP handler */
-  memset(&act, 0, sizeof(act));
-  act.sa_sigaction = &sh_tstp_handler;
-  act.sa_flags = SA_SIGINFO;
-  sigaction(SIGTSTP, &act, NULL);
-
-  /* Setup the SIGTTIN and STTOU handler */
+  /* Ignore SIGTTIN, STTOU and SIGTSTP handler */
   memset(&act, 0, sizeof(act));
   act.sa_sigaction = SIG_IGN;
   sigaction(SIGTTIN, &act, NULL);
   sigaction(SIGTTOU, &act, NULL);
+  sigaction(SIGTSTP, &act, NULL);
 
   /* Setup the signal mask */
   sigemptyset(&mask);

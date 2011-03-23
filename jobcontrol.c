@@ -99,7 +99,6 @@ int sh_foreground_job(int jid) {
       if(errno == ECHILD)
         break;
 
-      fprintf(stderr, "HERE: %d %d\n", errno, sh_jobs.fg_job);
       if(errno == EINTR && sh_jobs.fg_job == JT_NO_FG_JOB)
         break;
     }
