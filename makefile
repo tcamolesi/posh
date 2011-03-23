@@ -9,7 +9,7 @@ LEXSRC=$(LEXFILE:.l=.yy.c)
 BISFILE=posh.y
 BISSRC=$(BISFILE:.y=.tab.c)
 
-SOURCES=main.c util.c command.c shellcontrol.c $(LEXSRC) $(BISSRC)
+SOURCES=main.c util.c command.c shellcontrol.c builtins.c jobcontrol.c $(LEXSRC) $(BISSRC)
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=posh
 

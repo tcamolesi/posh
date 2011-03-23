@@ -21,9 +21,9 @@ int sh_init();
 
 void sh_tstp_handler(int sig, siginfo_t *siginfo, void *context) {
   /* If there's a foreground job, take the tty control from it */
-  fprintf(stderr, "In handler...\n");
+    fprintf(stderr, "In handler\n");
   if(sh_jobs.fg_job != JT_NO_FG_JOB) {
-    tcsetpgrp(STDIN_FILENO, getpgrp());
+    kill(-sh_jobs.jobs[sh_jobs.fg_job].ppl->gid, SIGSTOP);
     sh_jobs.fg_job = JT_NO_FG_JOB;
   }
 }
@@ -67,10 +67,10 @@ int sh_init() {
   setsid();
 
   /* Create a new process group */
-  /*setpgid(getpid(), getpid());*/
+  setpgid(getpid(), getpid());
 
   /* Acquire tty control */
-  /*tcsetpgrp(STDIN_FILENO, getpgrp());*/
+  tcsetpgrp(STDIN_FILENO, getpgrp());
 
   /* Setup the SIGCHLD handler */
   memset(&act, 0, sizeof(act));
@@ -79,15 +79,21 @@ int sh_init() {
   sigaction(SIGCHLD, &act, NULL);
 
   /* Setup the SIGTSTP handler */
-  /*memset(&act, 0, sizeof(act));
+  memset(&act, 0, sizeof(act));
   act.sa_sigaction = &sh_tstp_handler;
   act.sa_flags = SA_SIGINFO;
-  sigaction(SIGTSTP, &act, NULL);*/
+  sigaction(SIGTSTP, &act, NULL);
+
+  /* Setup the SIGTTIN and STTOU handler */
+  memset(&act, 0, sizeof(act));
+  act.sa_sigaction = SIG_IGN;
+  sigaction(SIGTTIN, &act, NULL);
+  sigaction(SIGTTOU, &act, NULL);
 
   /* Setup the signal mask */
-  /*sigemptyset(&mask);
-  sigaddset(&mask, SIGTSTP);
-  sigprocmask(SIG_UNBLOCK, &mask, NULL);*/
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGTSTP | SIGTTOU | SIGTTIN | SIGCHLD);
+  sigprocmask(SIG_SETMASK, &mask, NULL);
 
   return 1;
 }

@@ -23,7 +23,6 @@ int sh_find_job_by_pid(int pid) {
 void sh_print_job(int jid) {
   static const char* description[] = {
     "Unused",
-    "Foreground",
     "Running",
     "Stopped",
     "Terminated"
@@ -98,6 +97,10 @@ int sh_foreground_job(int jid) {
   while(1) {
     if(waitpid(-job->ppl->gid, NULL, 0) == -1) {
       if(errno == ECHILD)
+        break;
+
+      fprintf(stderr, "HERE: %d %d\n", errno, sh_jobs.fg_job);
+      if(errno == EINTR && sh_jobs.fg_job == JT_NO_FG_JOB)
         break;
     }
   }
