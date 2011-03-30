@@ -72,7 +72,14 @@ void sh_update_jobs() {
   Job* job;
   for(i = 0; i < SH_MAX_JOBS; i++) {
     job = &sh_jobs.jobs[i];
-    if(job->js == SH_TERMINATED) {
+
+    /*Skip unused slots*/
+    if(job->js == SH_UNUSED)
+      continue;
+
+    /*Check if job has finished its execution*/
+    if(waitpid(job->ppl->gid, NULL, WNOHANG) == ECHILD ||
+       job->js == SH_TERMINATED) {
       if(i == sh_jobs.fg_job)
         sh_jobs.fg_job = JT_NO_FG_JOB;
       else /*Don't notify the user that a foreground job was finished*/
@@ -127,6 +134,9 @@ int sh_foreground_job(int jid) {
 
   /* Give tty to the process group */
   tcsetpgrp(STDIN_FILENO, job->ppl->gid);
+
+  /* Unsuspend the process */
+  kill(-job->ppl->gid, SIGCONT);
   
   /* Wait for the pipeline to finish */
   while(1) {
@@ -139,6 +149,7 @@ int sh_foreground_job(int jid) {
     }
   }
 
+  /* Get tty back */
   tcsetpgrp(STDIN_FILENO, getpgrp());
 
   return 0;

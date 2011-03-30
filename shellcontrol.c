@@ -191,7 +191,7 @@ int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid) {
     memset(&act, 0, sizeof(act));
     act.sa_sigaction = (void*) SIG_DFL;
     sigaction(SIGTSTP, &act, NULL);
-    
+
     /*Exec the program*/
     execvp(cmd->cmd, cmd->args);
     fprintf(stderr, "ERROR: Unable to run: %s\n", cmd->cmd);
