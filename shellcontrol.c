@@ -75,7 +75,7 @@ int sh_init() {
 
   /* Ignore SIGTTIN, STTOU and SIGTSTP handler */
   memset(&act, 0, sizeof(act));
-  act.sa_sigaction = SIG_IGN;
+  act.sa_sigaction = (void*) SIG_IGN;
   sigaction(SIGTTIN, &act, NULL);
   sigaction(SIGTTOU, &act, NULL);
   sigaction(SIGTSTP, &act, NULL);
@@ -214,7 +214,7 @@ int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid) {
     /*Change SIGTSTP handler to SIG_DFL instead of SIG_IGN*/
     struct sigaction act;
     memset(&act, 0, sizeof(act));
-    act.sa_sigaction = SIG_DFL;
+    act.sa_sigaction = (void*) SIG_DFL;
     sigaction(SIGTSTP, &act, NULL);
     
     /*Exec the program*/
