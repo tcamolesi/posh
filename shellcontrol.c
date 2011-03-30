@@ -20,37 +20,6 @@ int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid);
 int sh_is_executable(Command *c);
 int sh_is_pipeline_valid(Pipeline *ppl);
 
-void sh_chld_handler(int sig, siginfo_t *siginfo, void *context) {
-  int pos;
-  pos = sh_find_job_by_pid(siginfo->si_pid);
-
-  /*Finish zombie processes*/
-  waitpid(siginfo->si_pid, 0, WNOHANG);
-
-  if(pos == -1 || sh_jobs.jobs[pos].js == SH_UNUSED)
-    return;
-
-  if (sh_jobs.jobs[pos].js == SH_TERMINATED)
-    return;
-
-  switch(siginfo->si_code) {
-    case CLD_STOPPED:
-      sh_jobs.jobs[pos].js = SH_STOPPED;
-      if( pos == sh_jobs.fg_job ) {
-        sh_jobs.fg_job = JT_NO_FG_JOB;
-        tcsetpgrp(STDIN_FILENO, getpgrp());
-      }
-      break;
-
-    case CLD_CONTINUED:
-      sh_jobs.jobs[pos].js = SH_RUNNING;
-      break;
-
-    default:
-      sh_jobs.jobs[pos].js = SH_TERMINATED;
-  }
-}
-
 int sh_init() {
   sigset_t mask;
   struct sigaction act;
@@ -104,6 +73,7 @@ int sh_process_pipeline(Pipeline* ppl) {
   if(!sh_is_pipeline_valid(ppl))
     return -1;
     
+  /*Try to execute a shell builtin*/
   switch(sh_exec_cmd(ppl->cmds[0])) {
     case ECMD_EXIT:
       return 0;
@@ -132,7 +102,8 @@ int sh_process_pipeline(Pipeline* ppl) {
       outp = sh_get_stdout(cmds[i]);
 
       if(outp < 0) {
-        fprintf(stderr, "ERROR: Unable to open %s for writing\n", cmds[i]->input);
+        fprintf(stderr, "ERROR: Unable to open %s for writing\n",
+            cmds[i]->input);
         error = 1;
         break;
       }
@@ -151,7 +122,7 @@ int sh_process_pipeline(Pipeline* ppl) {
     }
   }
 
-
+  /*If an error occurs, kill all of its processes and destroy the pipeline*/
   if(error) {
     sh_jobs.jobs[jid].js = SH_UNUSED;
     fprintf(stderr, "Error ocurred?\n");
@@ -258,6 +229,7 @@ int sh_is_executable(Command *c) {
   if(!(path = getenv("PATH")))
     return 0;
   
+  /*Try to execute cmd by prepending it with every path in $PATH*/
   do {
     next = strchr(path, ':');
 

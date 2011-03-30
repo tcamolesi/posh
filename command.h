@@ -29,55 +29,63 @@ typedef struct Pipeline {
 
 /**
 * Creates a new, initialized Command
-* \return A pointer to the newly created Command object
+*
+* @return A pointer to the newly created Command object
 */
 Command* new_command();
 
 /**
 * Destroys a Command object
-* \param cmd Pointer to a Command object
+*
+* @param cmd Pointer to a Command object
 */
 void destroy_command(Command* cmd);
 
 /**
 * Gets the number of arguments in the given Command
-* \param cmd Pointer to a Command object
-* \return The number of arguments in the Command
+*
+* @param cmd Pointer to a Command object
+* @return The number of arguments in the Command
 */
 int cmd_argcount(Command* cmd);
 
 /**
 * Adds an argument to a Command object
-* \param cmd The destination Command
-* \param arg The argument to be added
-* \return 1 if the call succeeds, 0 otherwise
+*
+* @param cmd The destination Command
+* @param arg The argument to be added
+* @return 1 if the call succeeds, 0 otherwise
 */
 int cmd_addarg(Command* cmd, char* arg);
 
 /**
 * Creates a new, initialized Pipeline
-* \return A pointer to the newly created Pipeline object
+*
+* @return A pointer to the newly created Pipeline object
 */
 Pipeline* new_pipeline();
 
 /**
 * Destroys a Pipeline object
-* \param ppl Pointer to a Pipeline object
+*
+* @param ppl Pointer to a Pipeline object
 */
 void destroy_pipeline(Pipeline* ppl);
 
 /**
 * Gets the number of commands in the given Pipeline
-* \param ppl Pointer to a Pipeline object
-* \return The number of commands in the Pipeline
+*
+* @param ppl Pointer to a Pipeline object
+* @return The number of commands in the Pipeline
 */
 int pipe_cmdcount(Pipeline* ppl);
 
 /**
 * Adds an command to a Pipeline object
-* \param ppl The destination Pipeline
-* \param cmd The command to be added
-* \return 1 if the call succeeds, 0 otherwise
+*
+* @param ppl The destination Pipeline
+* @param cmd The command to be added
+* @return 1 if the call succeeds, 0 otherwise
 */
 int pipe_addcmd(Pipeline* ppl, Command* cmd);
 

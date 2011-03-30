@@ -9,6 +9,13 @@
 #include "jobcontrol.h"
 #include "builtins.h"
 
+int sh_cmd_jobs(Command* cmd);
+int sh_cmd_cd(Command* cmd);
+int sh_cmd_exit(Command* cmd);
+int sh_cmd_kill(Command* cmd);
+int sh_cmd_fg(Command* cmd);
+int sh_cmd_bg(Command* cmd);
+
 BuiltinCmd sh_builtins[] = {
   { "exit", sh_cmd_exit },
   { "cd", sh_cmd_cd },
@@ -20,6 +27,27 @@ BuiltinCmd sh_builtins[] = {
   { NULL, NULL }
 };
 
+int sh_exec_cmd(Command *cmd) {
+  int i;
+  int res = ECMD_FAILED;
+  for(i = 0; sh_builtins[i].cmd != NULL; i++) {
+    if(!strcmp(cmd->cmd, sh_builtins[i].cmd)) {
+      res = sh_builtins[i].fn(cmd);
+      break;
+    }
+  }
+  return res;
+}
+
+int sh_is_builtin(Command *cmd) {
+  int i;
+  for(i = 0; sh_builtins[i].cmd != NULL; i++) {
+    if(!strcmp(cmd->cmd, sh_builtins[i].cmd)) {
+      return 1;
+    }
+  }
+  return 0;
+}
 
 int sh_cmd_fg(Command* cmd) {
   int jid;
@@ -102,27 +130,4 @@ int sh_cmd_kill(Command* cmd) {
     }
   }
   return ECMD_SUCCESS;
-}
-
-int sh_exec_cmd(Command *cmd) {
-  int i;
-  int res = ECMD_FAILED;
-  for(i = 0; sh_builtins[i].cmd != NULL; i++) {
-    if(!strcmp(cmd->cmd, sh_builtins[i].cmd)) {
-      res = sh_builtins[i].fn(cmd);
-      break;
-    }
-  }
-  return res;
-}
-
-int sh_is_builtin(Command *cmd) {
-  int i;
-  int res = ECMD_FAILED;
-  for(i = 0; sh_builtins[i].cmd != NULL; i++) {
-    if(!strcmp(cmd->cmd, sh_builtins[i].cmd)) {
-      return 1;
-    }
-  }
-  return 0;
 }

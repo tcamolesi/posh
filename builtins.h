@@ -15,15 +15,7 @@ enum ExecCmdResult {
   ECMD_EXIT
 };
 
-int sh_cmd_jobs(Command* cmd);
-int sh_cmd_cd(Command* cmd);
-int sh_cmd_exit(Command* cmd);
-int sh_cmd_kill(Command* cmd);
-int sh_cmd_fg(Command* cmd);
-int sh_cmd_bg(Command* cmd);
-
 int sh_exec_cmd(Command *cmd);
 int sh_is_builtin(Command *cmd);
-
 
 #endif

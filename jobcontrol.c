@@ -8,6 +8,40 @@
 
 JobTable sh_jobs;
 
+void sh_chld_handler(int sig, siginfo_t *siginfo, void *context) {
+  int pos;
+  pos = sh_find_job_by_pid(siginfo->si_pid);
+
+  /*Finish zombie processes*/
+  waitpid(siginfo->si_pid, 0, WNOHANG);
+
+  /*Check if job is valid*/
+  if(pos == -1 || sh_jobs.jobs[pos].js == SH_UNUSED)
+    return;
+  if (sh_jobs.jobs[pos].js == SH_TERMINATED)
+    return;
+
+  /*Update job status accordingly*/
+  switch(siginfo->si_code) {
+    case CLD_STOPPED:
+      sh_jobs.jobs[pos].js = SH_STOPPED;
+
+      /*If the foreground process has stopped, take control of the tty*/
+      if( pos == sh_jobs.fg_job ) {
+        sh_jobs.fg_job = JT_NO_FG_JOB;
+        tcsetpgrp(STDIN_FILENO, getpgrp());
+      }
+      break;
+
+    case CLD_CONTINUED:
+      sh_jobs.jobs[pos].js = SH_RUNNING;
+      break;
+
+    default:
+      sh_jobs.jobs[pos].js = SH_TERMINATED;
+  }
+}
+
 int sh_find_job_by_pid(int pid) {
   int i;
   Pipeline* ppl;
@@ -41,7 +75,7 @@ void sh_update_jobs() {
     if(job->js == SH_TERMINATED) {
       if(i == sh_jobs.fg_job)
         sh_jobs.fg_job = JT_NO_FG_JOB;
-      else
+      else /*Don't notify the user that a foreground job was finished*/
         sh_print_job(i);
 
       job->js = SH_UNUSED;
@@ -56,10 +90,10 @@ int sh_add_job(Pipeline *ppl) {
   int i, pos;
   Job* job;
 
-  if(sh_jobs.first_free >= SH_MAX_JOBS) {
+  if(sh_jobs.first_free >= SH_MAX_JOBS)
     return -1;
-  }
 
+  /*Find a free slot*/
   pos = sh_jobs.first_free;
   sh_jobs.first_free = SH_MAX_JOBS;
   for(i = pos + 1; i < SH_MAX_JOBS; i++) {
@@ -69,6 +103,7 @@ int sh_add_job(Pipeline *ppl) {
     }
   }
 
+  /*Setup job information*/
   job = &sh_jobs.jobs[pos];
   job->ppl = ppl;
   job->js = SH_STOPPED;
