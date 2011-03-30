@@ -32,8 +32,6 @@ void sh_chld_handler(int sig, siginfo_t *siginfo, void *context) {
   if (sh_jobs.jobs[pos].js == SH_TERMINATED)
     return;
 
-  fprintf(stderr, "In child handler\n");
-
   switch(siginfo->si_code) {
     case CLD_STOPPED:
       sh_jobs.jobs[pos].js = SH_STOPPED;
@@ -193,11 +191,13 @@ int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid) {
   
   pid = vfork();
   if(!pid) { /*Child*/
+    /*Change group id*/
     if(gid)
       setpgid(getpid(), gid);
     else
       setpgid(getpid(), getpid());
 
+    /*Close pipes (if necessary)*/
     if(inp != STDIN_FILENO) {
       dup2(inp, STDIN_FILENO);
       close(inp);
@@ -210,7 +210,14 @@ int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid) {
     
     if(!no_pipe) 
       close(pfd[1]);
+
+    /*Change SIGTSTP handler to SIG_DFL instead of SIG_IGN*/
+    struct sigaction act;
+    memset(&act, 0, sizeof(act));
+    act.sa_sigaction = SIG_DFL;
+    sigaction(SIGTSTP, &act, NULL);
     
+    /*Exec the program*/
     execvp(cmd->cmd, cmd->args);
     fprintf(stderr, "ERROR: Unable to run: %s\n", cmd->cmd);
     exit(-1);
