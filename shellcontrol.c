@@ -255,7 +255,11 @@ int sh_is_pipeline_valid(Pipeline *ppl) {
   Command **c;
 
   for(c = ppl->cmds; *c != NULL; c++) {
-    if (!sh_is_builtin(*c) && !sh_is_executable(*c)) {
+    /*If the first command is a builtin, the pipeline is valid*/
+    if (c == ppl->cmds && sh_is_builtin(*c))
+      return 1;
+
+    if (!sh_is_executable(*c)) {
       fprintf(stderr, "ERROR: Invalid command: \"%s\"\n", (*c)->cmd);
       return 0;
     }
