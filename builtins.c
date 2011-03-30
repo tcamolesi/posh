@@ -115,3 +115,14 @@ int sh_exec_cmd(Command *cmd) {
   }
   return res;
 }
+
+int sh_is_builtin(Command *cmd) {
+  int i;
+  int res = ECMD_FAILED;
+  for(i = 0; sh_builtins[i].cmd != NULL; i++) {
+    if(!strcmp(cmd->cmd, sh_builtins[i].cmd)) {
+      return 1;
+    }
+  }
+  return 0;
+}

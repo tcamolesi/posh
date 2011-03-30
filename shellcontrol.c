@@ -17,7 +17,8 @@
 int sh_get_stdin(Command *cmd);
 int sh_get_stdout(Command *cmd);
 int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid);
-int sh_init();
+int sh_is_executable(Command *c);
+int sh_is_pipeline_valid(Pipeline *ppl);
 
 void sh_chld_handler(int sig, siginfo_t *siginfo, void *context) {
   int pos;
@@ -100,6 +101,9 @@ int sh_process_pipeline(Pipeline* ppl) {
 
   sh_update_jobs();
 
+  if(!sh_is_pipeline_valid(ppl))
+    return -1;
+    
   switch(sh_exec_cmd(ppl->cmds[0])) {
     case ECMD_EXIT:
       return 0;
@@ -235,4 +239,55 @@ int sh_run_cmd(Command *cmd, int inp, int outp, int no_pipe, pid_t gid) {
 
     return 0;
   }
+}
+
+int sh_is_executable(Command *c) {
+  char buffer[1024];
+  char *path, *next;
+  int  len;
+  char* cmd = c->cmd;
+
+  /*If it's an absolute or relative path, just check if it's executable*/
+  if(strchr(cmd, '/')) {
+    if(access(cmd, X_OK) == 0)
+      return 1;
+    else
+      return 0;
+  }
+
+  if(!(path = getenv("PATH")))
+    return 0;
+  
+  do {
+    next = strchr(path, ':');
+
+    if(next)
+      len = next - path;
+    else
+      len = strlen(path);
+
+    strncpy(buffer, path, len);
+    buffer[len] = '/';
+    strcpy(&buffer[len + 1], cmd);
+
+    if(access(buffer, X_OK) == 0)
+      return 1;
+
+    path = next + 1;
+  } while (next);
+
+  return 0;
+}
+
+int sh_is_pipeline_valid(Pipeline *ppl) {
+  Command **c;
+
+  for(c = ppl->cmds; *c != NULL; c++) {
+    if (!sh_is_builtin(*c) && !sh_is_executable(*c)) {
+      fprintf(stderr, "ERROR: Invalid command: \"%s\"\n", (*c)->cmd);
+      return 0;
+    }
+  }
+
+  return 1;
 }

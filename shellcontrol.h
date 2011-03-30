@@ -8,6 +8,5 @@ int sh_init();
 int sh_process_pipeline(Pipeline* ppl);
 
 void sh_chld_handler(int sig, siginfo_t *siginfo, void *context);
-void sh_tstp_handler(int sig, siginfo_t *siginfo, void *context);
 
 #endif

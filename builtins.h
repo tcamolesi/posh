@@ -23,6 +23,7 @@ int sh_cmd_fg(Command* cmd);
 int sh_cmd_bg(Command* cmd);
 
 int sh_exec_cmd(Command *cmd);
+int sh_is_builtin(Command *cmd);
 
 
 #endif
